@@ -81,9 +81,6 @@ public class StickMaker extends LoopingScript {
         return super.initialize();
     }
 
-    public static Gson gson = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping()
-            .create();
-
     @Override
     public void onLoop() {
         LocalPlayer player = Client.getLocalPlayer();
@@ -246,15 +243,13 @@ public class StickMaker extends LoopingScript {
         println("LoadFromPreset | Attempting to open the bank");
         // Attempt to open the bank, wait until it's open
         Bank.open();
-        boolean bankOpened = Execution.delayUntil(timeout, Bank::isOpen); // Wait up to 10 seconds for the bank to open
+        boolean bankOpened = Execution.delayUntil(timeout, Bank::isOpen); 
         if (bankOpened) {
             println("LoadFromPreset | Bank is open, selecting preset: " + PresetNumber);
             Bank.loadPreset(PresetNumber);
-            // Wait for the bank to close after loading the preset
-            boolean bankClosed = Execution.delayUntil(timeout, () -> !Bank.isOpen()); // Wait up to 10 seconds for the
+            boolean bankClosed = Execution.delayUntil(timeout, () -> !Bank.isOpen()); 
             if (bankClosed) {
                 println("LoadFromPreset | Preset loaded and bank closed successfully.");
-                // botState = BotState.RUNNING;
             } else {
                 println("LoadFromPreset | Timeout waiting for bank to close.");
             }
@@ -265,7 +260,6 @@ public class StickMaker extends LoopingScript {
 
     public void ExecDelay() {
         int delay = RandomGenerator.nextInt(400, 800);
-        // println("ExecDelay: " + delay);
         Execution.delay(delay);
     }
 
@@ -299,7 +293,6 @@ public class StickMaker extends LoopingScript {
     }
 
     public boolean HasSupplies() {
-        // int stickprecheck = GetInvItemCount(selectedIncenseStickName);
         int stickprecheck = InventoryItemQuery.newQuery(93).name(selectedIncenseStickName).results().size();
         println("HasSupplies | pre check for stack: " + stickprecheck);
         if (stickprecheck <= 0) {
@@ -313,14 +306,12 @@ public class StickMaker extends LoopingScript {
             Execution.delay(300);
             int sticks = InventoryItemQuery.newQuery(93).name(selectedIncenseStickName).results().first()
                     .getStackSize();
-            // println("HasSupplies | Enough items present | Sticks: " + sticks);
             Execution.delay(300);
             int ashid = GetAshesId(selectedIncenseStickName);
             if (ashid <= 0) {
                 return false;
             } else {
                 int ash = InventoryItemQuery.newQuery(93).ids(ashid).results().size();
-                // println("HasSupplies | Enough items present | Ash: " + ash);
                 if (sticks >= 1 && ash >= 2) {
                     println("HasSupplies | Enough items present | Sticks: " + sticks + "| Ashes: " + ash);
                     return true;
@@ -380,9 +371,7 @@ public class StickMaker extends LoopingScript {
     }
 
     public boolean CheckForLogs() {
-        // Execution.delay(200);
         int log = GetInvLogCount(selectedLogName);
-        // ExecDelay();
         if (log >= 2) {
             println("checkForLogs | Logs exist");
             return true;
@@ -482,8 +471,6 @@ public class StickMaker extends LoopingScript {
             }
         }
 
-        // println("CheckForAshes | Required ash was found " +
-        // selectedIncenseStickName);
         return true;
     }
 
@@ -696,5 +683,4 @@ public class StickMaker extends LoopingScript {
     public void setBotState(BotState botState) {
         this.botState = botState;
     }
-
 }
