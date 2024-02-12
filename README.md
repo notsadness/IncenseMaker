@@ -27,9 +27,13 @@ The script has 5 core states:
 5. BANKING
 
 **IDLE**: is used when the script returns from one of it's methods (ie, no logs in the bank).
+
 **STOPPED**: is invoked via the "Stop Script" button, or when ***Logout on Completion*** is ticked in the ImGui.  When the logout option is selected, the script will first go into an IDLE state, followed by STOPPED when the actual logout occurs..
+
 **RUNNING**: When the core script is executing.
+
 **PROCESSING**: This state is effectively a "wait" function, which loops until Interface *1251* (the item production interface) is closed.  It then moves to the ***RUNNING*** state.
+
 **BANKING**: Retrieves items from bank preset, and confirms items are present in the inventory.
 
 ## To Do List
