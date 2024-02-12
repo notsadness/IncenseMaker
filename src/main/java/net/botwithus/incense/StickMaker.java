@@ -1,43 +1,21 @@
 package net.botwithus.incense;
 
-import java.util.List;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import net.botwithus.api.game.hud.Dialog;
 import net.botwithus.api.game.hud.inventories.Backpack;
 import net.botwithus.api.game.hud.inventories.Bank;
-import net.botwithus.api.game.hud.inventories.Inventory;
 import net.botwithus.internal.scripts.ScriptDefinition;
-import net.botwithus.rs3.events.EventBus;
-import net.botwithus.rs3.events.impl.InventoryUpdateEvent;
-import net.botwithus.rs3.events.impl.ServerTickedEvent;
 import net.botwithus.rs3.game.Client;
 import net.botwithus.rs3.game.Item;
-import net.botwithus.rs3.game.annotations.Interactable;
 import net.botwithus.rs3.game.hud.interfaces.Component;
 import net.botwithus.rs3.game.hud.interfaces.Interfaces;
-import net.botwithus.rs3.game.js5.types.vars.VarDomainType;
 import net.botwithus.rs3.game.minimenu.MiniMenu;
 import net.botwithus.rs3.game.minimenu.actions.ComponentAction;
-import net.botwithus.rs3.game.queries.builders.animations.SpotAnimationQuery;
-import net.botwithus.rs3.game.queries.builders.characters.NpcQuery;
 import net.botwithus.rs3.game.queries.builders.components.ComponentQuery;
-import net.botwithus.rs3.game.queries.builders.items.GroundItemQuery;
 import net.botwithus.rs3.game.queries.builders.items.InventoryItemQuery;
-import net.botwithus.rs3.game.queries.builders.objects.SceneObjectQuery;
-import net.botwithus.rs3.game.queries.results.EntityResultSet;
-import net.botwithus.rs3.game.queries.results.ResultSet;
-import net.botwithus.rs3.game.scene.entities.animation.SpotAnimation;
-import net.botwithus.rs3.game.scene.entities.characters.npc.Npc;
 import net.botwithus.rs3.game.scene.entities.characters.player.LocalPlayer;
-import net.botwithus.rs3.game.scene.entities.characters.player.Player;
-import net.botwithus.rs3.game.scene.entities.item.GroundItem;
-import net.botwithus.rs3.game.skills.Skill;
-import net.botwithus.rs3.game.skills.Skills;
-import net.botwithus.rs3.game.vars.VarManager;
 import net.botwithus.rs3.script.Execution;
 import net.botwithus.rs3.script.LoopingScript;
-import net.botwithus.rs3.script.TickingScript;
 import net.botwithus.rs3.script.config.ScriptConfig;
 import net.botwithus.rs3.util.RandomGenerator;
 
@@ -46,11 +24,6 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.Map;
 import java.util.Random;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Supplier;
-
-import javax.lang.model.type.ExecutableType;
-import javax.swing.Action;
 
 public class StickMaker extends LoopingScript {
     public StickMaker(String name, ScriptConfig scriptConfig, ScriptDefinition scriptDefinition) {
