@@ -37,8 +37,8 @@ The script has 5 core states:
 **BANKING**: Retrieves items from bank preset, and confirms items are present in the inventory.
 
 ## To Do List
-1.	Refactor and remove the many redundant/duplicate methods
-2.	Modify existing methods to use item name only instead of a combination of IDs and item names (I came across an issue with item stacks which only seemed to work when using an ID, not an item name. More testing is needed)
-3.  Move to switch/case for the required resources (logs/ashes/herbs), returning it's completed variant
+1.	~~ Refactor and remove the many redundant/duplicate methods ~~
+2.	~~Modify existing methods to use item name only instead of a combination of IDs and item names (I came across an issue with item stacks which only seemed to work when using an ID, not an item name. More testing is needed)~~
+3.  ~~Move to switch/case for the required resources (logs/ashes/herbs), returning it's completed variant~~
 4.	Add a task queue system
-5.	Add script progress to the ImGui window
+5.	~~Add script progress to the ImGui window~~
