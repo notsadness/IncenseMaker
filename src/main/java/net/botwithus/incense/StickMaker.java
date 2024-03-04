@@ -1,10 +1,9 @@
 package net.botwithus.incense;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import net.botwithus.api.game.hud.inventories.Backpack;
 import net.botwithus.api.game.hud.inventories.Bank;
 import net.botwithus.internal.scripts.ScriptDefinition;
+import net.botwithus.rs3.events.impl.InventoryUpdateEvent;
 import net.botwithus.rs3.game.Client;
 import net.botwithus.rs3.game.Item;
 import net.botwithus.rs3.game.hud.interfaces.Component;
@@ -18,11 +17,6 @@ import net.botwithus.rs3.script.Execution;
 import net.botwithus.rs3.script.LoopingScript;
 import net.botwithus.rs3.script.config.ScriptConfig;
 import net.botwithus.rs3.util.RandomGenerator;
-
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Set;
-import java.util.Map;
 import java.util.Random;
 
 public class StickMaker extends LoopingScript {
@@ -40,11 +34,18 @@ public class StickMaker extends LoopingScript {
     public long timeout = 90000;
     private Random random = new Random();
     public boolean logout = false;
+    public boolean DebugScript = false;
+
+    // Refactored for enums
+    public Logs activeLogs;
+    public Incense activeIncense;
+    public AshedSticks activeAshedSticks;
 
     // SelectionFunction 0: Required for processing logs
     public int selectedLogId;
     public String selectedLogName;
     public boolean HasLogs = false;
+    public String selectedBaseStick;
 
     // SelectionFunction 1: Required for adding ash to incense sticks
     public int selectedAshesId;
@@ -57,9 +58,10 @@ public class StickMaker extends LoopingScript {
     public String selectedStickName; // The actual incense stick name. Eg: Torstol incense sticks
 
     // Required for ImGui status count
-    private int CraftedLogCount = 0;
-    private int AshedIncenseCount = 0;
-    private int FinishedIncenseCount = 0;
+    public long scriptStart;
+    public int craftedLogCount = 0;
+    public int ashedIncenseCount = 0;
+    public int finishedIncenseCount = 0;
 
     // Set the bot state
     public BotState botState = BotState.STOPPED;
@@ -75,9 +77,49 @@ public class StickMaker extends LoopingScript {
 
     @Override
     public boolean initialize() {
+        scriptStart = System.currentTimeMillis();
         this.sgc = new StickMakerGraphicsContext(getConsole(), this);
         this.loopDelay = 590;
 
+        // Inventory update subscription for script status
+        subscribe(InventoryUpdateEvent.class, (event) -> {
+            Item item = event.getNewItem();
+            int itemid = item.getId();
+            int craftedStickId = activeLogs.getBaseSticks().getItemId();
+            int ashedStickId = activeAshedSticks.getItemId();
+            int finalStickId = activeIncense.getItemId();
+            if (item != null) {
+                if (item.getInventoryType() != null && item.getInventoryType().getId() != 93) {
+                    return;
+                }
+                if (itemid == craftedStickId) {
+                    Item oldItem = event.getOldItem();
+                    int newcount = item.getStackSize();
+                    int oldcount = (oldItem != null && oldItem.getStackSize() > 1) ? oldItem.getStackSize() : 0;
+                    if (newcount > oldcount) {
+                        craftedLogCount++;
+                    }
+                }
+                if (itemid == ashedStickId) {
+                    Item oldItem = event.getOldItem();
+                    int newcount = item.getStackSize();
+                    int oldcount = (oldItem != null && oldItem.getStackSize() > 1) ? oldItem.getStackSize() : 0;
+                    if (newcount > oldcount) {
+                        ashedIncenseCount++;
+                    }
+                }
+                if (itemid == finalStickId) {
+                    Item oldItem = event.getOldItem();
+                    int newcount = item.getStackSize();
+                    println("NEW COUNT: " + newcount);
+                    int oldcount = (oldItem != null && oldItem.getStackSize() > 1) ? oldItem.getStackSize() : 0;
+                    println("old COUNT: " + oldcount);
+                    if (newcount > oldcount) {
+                        finishedIncenseCount++;
+                    }
+                }
+            }
+        });
         return super.initialize();
     }
 
@@ -88,15 +130,27 @@ public class StickMaker extends LoopingScript {
             Execution.delay(random.nextLong(3000, 4000));
             return;
         }
-        // Debuging use. Comment out prior to release.
-        // println("Current logs: " + selectedLogName);
-        // println("Current log id: " + selectedLogId);
-        // println("Current bank preset id " + currentPresetId);
-        // println("Selected function: " + SelectedFunction);
-        // println("Current incense stick id" + selectedIncenseStickId);
-        // println("current incense stick name: " + selectedIncenseStickName);
-        // println("Current ashed incense stick id" + selectedStickRawName);
-        // println("Current finished incense stick name: " + selectedStickName);
+
+        // Set config
+        selectedLogName = activeLogs.getItemName();
+        selectedLogId = activeLogs.getItemId();
+        selectedIncenseStickId = activeAshedSticks.getBaseSticks().getItemId();
+        selectedIncenseStickName = activeAshedSticks.getBaseSticks().getItemName();
+        selectedStickName = activeIncense.getItemName();
+        selectedStickRawName = activeIncense.getAshedSticks().getItemName();
+        selectedBaseStick = activeLogs.getBaseSticks().getItemName();
+
+        if (DebugScript) {
+            // Debuging use. Comment out prior to release.
+            println("Current bank preset id " + currentPresetId);
+            println("Selected function: " + SelectedFunction);
+            println("selectedLogName: " + selectedLogName);
+            println("selectedLogId: " + selectedLogId);
+            println("selectedIncenseStickId: " + selectedIncenseStickId);
+            println("selectedIncenseStickName: " + selectedIncenseStickName);
+            println("selectedStickRawName: " + selectedStickRawName);
+            println("selectedStickName: " + selectedStickName);
+        }
 
         switch (botState) {
             case IDLE -> {
@@ -141,7 +195,7 @@ public class StickMaker extends LoopingScript {
             if (CheckForLogs()) {
                 println("HandleBankingState | Logs found, transition to RUNNING.");
                 botState = BotState.RUNNING;
-                return random.nextLong(1000, 2000);
+                return random.nextLong(800, 1850);
             } else {
                 println("HandleBankingState | Logs not found, transition to IDLE.");
                 botState = BotState.IDLE;
@@ -150,7 +204,7 @@ public class StickMaker extends LoopingScript {
             if (HasSupplies()) {
                 println("HandleBankingState | Supplies found, transition to RUNNING.");
                 botState = BotState.RUNNING;
-                return random.nextLong(1000, 2000);
+                return random.nextLong(800, 1850);
             } else {
                 println("HandleBankingState | Supplies not found, transition to IDLE.");
                 botState = BotState.IDLE;
@@ -159,7 +213,7 @@ public class StickMaker extends LoopingScript {
             if (HasHerbs()) {
                 println("HandleBankingState | Herbs found, transition to RUNNING.");
                 botState = BotState.RUNNING;
-                return random.nextLong(1000, 2000);
+                return random.nextLong(800, 1850);
             } else {
                 println("HandleBankingState | Herbs not found, transition to IDLE.");
                 botState = BotState.IDLE;
@@ -189,7 +243,8 @@ public class StickMaker extends LoopingScript {
             if (!HasLogs) {
                 // Attempt to load bank preset
                 botState = BotState.BANKING;
-                return random.nextLong(1000, 3000);
+                // return random.nextLong(1000, 3000);
+                return random.nextLong(850, 2145);
             } else {
                 println("HandleExec | Crafting logs");
                 CraftLogs(selectedLogId);
@@ -201,30 +256,31 @@ public class StickMaker extends LoopingScript {
             if (!HasSupplies) {
                 // Attempt to load bank preset
                 botState = BotState.BANKING;
-                return random.nextLong(1000, 3000);
+                // return random.nextLong(1000, 3000);
+                return random.nextLong(850, 2145);
             } else {
                 println("HandleExec | Process incense sticks");
                 CoatSticks(selectedIncenseStickId);
             }
         } else if (SelectedFunction == 2) {
-            println("Selection 1: Processing final incense sticks");
+            println("Selection 2: Processing final incense sticks");
             HasSupplies = HasHerbs();
 
             if (!HasSupplies) {
                 // Attempt to load bank preset
                 botState = BotState.BANKING;
-                return random.nextLong(1000, 3000);
+                return random.nextLong(804, 2145);
             } else {
                 println("HandleExec | Adding herb to incense sticks");
                 HerbSticks(selectedStickRawName);
             }
         }
-        return random.nextLong(1500, 4500);
+        // return random.nextLong(1500, 4500);
+        return random.nextLong(856, 2133);
+
     }
 
     // Helper methods
-    // These need a major clean up and refactor which is intended in the next
-    // release
 
     public void Logout() {
         println("Logout | Logout initiated with a 10 second delay.");
@@ -243,11 +299,11 @@ public class StickMaker extends LoopingScript {
         println("LoadFromPreset | Attempting to open the bank");
         // Attempt to open the bank, wait until it's open
         Bank.open();
-        boolean bankOpened = Execution.delayUntil(timeout, Bank::isOpen); 
+        boolean bankOpened = Execution.delayUntil(timeout, Bank::isOpen);
         if (bankOpened) {
             println("LoadFromPreset | Bank is open, selecting preset: " + PresetNumber);
             Bank.loadPreset(PresetNumber);
-            boolean bankClosed = Execution.delayUntil(timeout, () -> !Bank.isOpen()); 
+            boolean bankClosed = Execution.delayUntil(timeout, () -> !Bank.isOpen());
             if (bankClosed) {
                 println("LoadFromPreset | Preset loaded and bank closed successfully.");
             } else {
@@ -299,15 +355,17 @@ public class StickMaker extends LoopingScript {
             println("HasSupplies | No incense sticks found");
             return false;
         } else {
-            if (!CheckForAshes(selectedIncenseStickName)) {
+            if (!CheckForAshes()) {
                 println("HasSupplies | Incompatible ashes detected.");
                 return false;
             }
             Execution.delay(300);
             int sticks = InventoryItemQuery.newQuery(93).name(selectedIncenseStickName).results().first()
                     .getStackSize();
+            println("HasSupplies | stack size: " + sticks);
             Execution.delay(300);
-            int ashid = GetAshesId(selectedIncenseStickName);
+            int ashid = activeAshedSticks.getAshType().getItemId();
+            println("Ash ID : " + ashid);
             if (ashid <= 0) {
                 return false;
             } else {
@@ -340,7 +398,7 @@ public class StickMaker extends LoopingScript {
                     .getStackSize();
             println("HasHerbs | Enough items present | Sticks: " + sticks);
             Execution.delay(300);
-            int herbid = GetHerbId(selectedStickName);
+            int herbid = activeIncense.getSelectedHerbs().getItemId();
             if (herbid <= 0) {
                 return false;
             } else {
@@ -356,17 +414,6 @@ public class StickMaker extends LoopingScript {
                     }
                 }
             }
-        }
-    }
-
-    public int GetItemId(String ItemName) {
-        Item log = InventoryItemQuery.newQuery(93).name(ItemName).results().first();
-        if (log != null) {
-            println("GetItemId | ID:" + " " + log.getId());
-            return log.getId();
-        } else {
-            println("GetItemId | Item not found.");
-            return -1;
         }
     }
 
@@ -405,149 +452,29 @@ public class StickMaker extends LoopingScript {
         }
     }
 
-    public boolean CheckForAshes(String selectedIncenseStickName) {
-        // List of incense stick names to sets of supported ashes
-        Map<String, Set<Integer>> AshList = new HashMap<>();
-        AshList.put("Wooden incense sticks", new HashSet<>(Set.of(20264))); // Impious ashes
-        AshList.put("Oak incense sticks", new HashSet<>(Set.of(20264))); // Impious ashes
-        AshList.put("Willow incense sticks", new HashSet<>(Set.of(20264))); // Impious ashes
-        AshList.put("Maple incense sticks", new HashSet<>(Set.of(20266))); // Accursed ashes
-        AshList.put("Acadia incense sticks", new HashSet<>(Set.of(20266))); // Accursed ashes
-        AshList.put("Yew incense sticks", new HashSet<>(Set.of(20268))); // Infernal ashes
-        AshList.put("Magic incense sticks", new HashSet<>(Set.of(20268))); // Infernal ashes
-
-        // Check if the selected incense stick name is in the list
-        if (!AshList.containsKey(selectedIncenseStickName)) {
-            println("CheckForAshes | Selected incense stick type is not supported.");
+    public boolean CheckForAshes() {
+        int AshId = activeAshedSticks.getAshType().getItemId();
+        println("CheckForAshes | Ash ID " + AshId);
+        if (!CheckForItem(AshId)) {
+            // Required ash is not present, halt
+            println("CheckForAshes | Required ash not found for incense: " + selectedIncenseStickName);
             return false;
+        } else {
+            println("CheckForAshes | Required ash was found " + selectedIncenseStickName);
+            return true;
         }
-
-        // Iterate through the set of required item IDs for the selected incense stick
-        for (int requiredItemId : AshList.get(selectedIncenseStickName)) {
-            if (!CheckForItem(requiredItemId)) {
-                // Required ash is not present, halt
-                println("CheckForAshes | Required ash not found for incense: " + selectedIncenseStickName);
-                return false;
-            }
-        }
-        println("CheckForAshes | Required ash was found " + selectedIncenseStickName);
-        return true;
     }
 
     public boolean CheckForHerb(String IncenseStickName) {
-        // List of incense stick names to sets of supported ashes
-        Map<String, Set<Integer>> StickList = new HashMap<>();
-        StickList.put("Guam incense sticks", new HashSet<>(Set.of(47692))); // Impious incense
-        StickList.put("Tarromin incense sticks", new HashSet<>(Set.of(47692)));
-        StickList.put("Marrentill incense sticks", new HashSet<>(Set.of(47692)));
-        StickList.put("Harralander incense sticks", new HashSet<>(Set.of(47693))); // Impious oak
-        StickList.put("Ranarr incense sticks", new HashSet<>(Set.of(47693)));
-        StickList.put("Toadflax incense sticks", new HashSet<>(Set.of(47694))); // Impious willow
-        StickList.put("Spirit weed incense sticks", new HashSet<>(Set.of(47694)));
-        StickList.put("Irit incense sticks", new HashSet<>(Set.of(47695))); // Accursed maple
-        StickList.put("Wergali incense sticks", new HashSet<>(Set.of(47695)));
-        StickList.put("Avantoe incense sticks", new HashSet<>(Set.of(47696))); // Accursed acadia
-        StickList.put("Kwuarm incense sticks", new HashSet<>(Set.of(47696)));
-        StickList.put("Bloodweed incense sticks", new HashSet<>(Set.of(47696)));
-        StickList.put("Snapdragon incense sticks", new HashSet<>(Set.of(47696)));
-        StickList.put("Cadantine incense sticks", new HashSet<>(Set.of(47697))); // Infernal yew
-        StickList.put("Lantadyme incense sticks", new HashSet<>(Set.of(47697)));
-        StickList.put("Dwarf weed incense sticks", new HashSet<>(Set.of(47697)));
-        StickList.put("Torstol incense sticks", new HashSet<>(Set.of(47698))); // Infernal magic
-        StickList.put("Fellstalk incense sticks", new HashSet<>(Set.of(47698)));
-
-        // Check if the selected incense stick name is in the list
-        if (!StickList.containsKey(IncenseStickName)) {
-            println("CheckForHerb | Selected incense stick type is not supported.");
+        int HerbId = activeIncense.getSelectedHerbs().getItemId();
+        if (!CheckForItem(HerbId)) {
+            // Required ash is not present, halt
+            println("CheckForHerb | Required herb not found for incense: " + IncenseStickName);
             return false;
+        } else {
+            println("CheckForHerb | Required herb present: " + IncenseStickName);
+            return true;
         }
-
-        // Iterate through the set of required item IDs for the selected incense stick
-        for (int requiredItemId : StickList.get(IncenseStickName)) {
-            if (!CheckForItem(requiredItemId)) {
-                // Required ash is not present, halt
-                println("CheckForHerb | Required herb not found for incense: " + IncenseStickName);
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    public int GetHerbId(String IncenseStickName) {
-        // List of incense stick names to sets of supported ashes
-        Map<String, Set<Integer>> StickList = new HashMap<>();
-        StickList.put("Guam incense sticks", new HashSet<>(Set.of(249)));
-        StickList.put("Tarromin incense sticks", new HashSet<>(Set.of(254)));
-        StickList.put("Marrentill incense sticks", new HashSet<>(Set.of(251)));
-        StickList.put("Harralander incense sticks", new HashSet<>(Set.of(255)));
-        StickList.put("Ranarr incense sticks", new HashSet<>(Set.of(255))); // Not provided, assuming previous value
-        StickList.put("Toadflax incense sticks", new HashSet<>(Set.of(2998)));
-        StickList.put("Spirit weed incense sticks", new HashSet<>(Set.of(12172)));
-        StickList.put("Irit incense sticks", new HashSet<>(Set.of(259)));
-        StickList.put("Wergali incense sticks", new HashSet<>(Set.of(14854)));
-        StickList.put("Avantoe incense sticks", new HashSet<>(Set.of(261)));
-        StickList.put("Kwuarm incense sticks", new HashSet<>(Set.of(263)));
-        StickList.put("Bloodweed incense sticks", new HashSet<>(Set.of(37953)));
-        StickList.put("Snapdragon incense sticks", new HashSet<>(Set.of(3000)));
-        StickList.put("Cadantine incense sticks", new HashSet<>(Set.of(265)));
-        StickList.put("Lantadyme incense sticks", new HashSet<>(Set.of(2481)));
-        StickList.put("Dwarf weed incense sticks", new HashSet<>(Set.of(267)));
-        StickList.put("Torstol incense sticks", new HashSet<>(Set.of(269)));
-        StickList.put("Fellstalk incense sticks", new HashSet<>(Set.of(21624)));
-
-        // Check if the selected incense stick name is in the list
-        if (!StickList.containsKey(IncenseStickName)) {
-            println("CheckForHerb | Selected incense stick type is not supported.");
-            return -1;
-        }
-
-        // Iterate through the set of required item IDs for the selected incense stick
-        for (int requiredItemId : StickList.get(IncenseStickName)) {
-            if (!CheckForItem(requiredItemId)) {
-                // Required ash is not present, halt
-                println("CheckForHerb | Required herb not found for incense: " + IncenseStickName);
-                return -1;
-            } else {
-                return requiredItemId;
-            }
-        }
-        // println("CheckForAshes | Required ash was found " +
-        // selectedIncenseStickName);
-        return -1;
-    }
-
-    public int GetAshesId(String selectedIncenseStickName) {
-        // List of incense stick names to sets of supported ashes
-        Map<String, Set<Integer>> AshList = new HashMap<>();
-        AshList.put("Incense sticks", new HashSet<>(Set.of(20264))); // Impious ashes
-        AshList.put("Oak incense sticks", new HashSet<>(Set.of(20264))); // Impious ashes
-        AshList.put("Willow incense sticks", new HashSet<>(Set.of(20264))); // Impious ashes
-        AshList.put("Maple incense sticks", new HashSet<>(Set.of(20266))); // Accursed ashes
-        AshList.put("Acadia incense sticks", new HashSet<>(Set.of(20266))); // Accursed ashes
-        AshList.put("Yew incense sticks", new HashSet<>(Set.of(20268))); // Infernal ashes
-        AshList.put("Magic incense sticks", new HashSet<>(Set.of(20268))); // Infernal ashes
-
-        // Check if the selected incense stick name is in the list
-        if (!AshList.containsKey(selectedIncenseStickName)) {
-            println("CheckForAshes | Selected incense stick type is not supported.");
-            return -1;
-        }
-
-        // Iterate through the set of required item IDs for the selected incense stick
-        for (int requiredItemId : AshList.get(selectedIncenseStickName)) {
-            if (!CheckForItem(requiredItemId)) {
-                // Required ash is not present, halt
-                println("CheckForHerb | Required ash not found for incense: " + selectedIncenseStickName);
-                return -1;
-            } else {
-                return requiredItemId;
-            }
-        }
-
-        // println("CheckForAshes | Required ash was found " +
-        // selectedIncenseStickName);
-        return -1;
     }
 
     public boolean CheckForSticks() {
@@ -682,5 +609,41 @@ public class StickMaker extends LoopingScript {
 
     public void setBotState(BotState botState) {
         this.botState = botState;
+    }
+
+    // Enum helpers
+    public void setActiveLogs(Logs log) {
+        println("setActiveLogs");
+        this.activeLogs = log;
+        this.selectedLogName = log.getItemName();
+        this.selectedLogId = log.getItemId();
+    }
+
+    public Logs getLogs(Logs log) {
+        println("getLogs");
+        return this.activeLogs;
+    }
+
+    public void setActiveIncense(Incense incense) {
+        println("setActiveIncense");
+        this.activeIncense = incense;
+        this.selectedStickName = incense.getItemName();
+    }
+
+    public Incense getIncense(Incense incense) {
+        println("getIncense");
+        return this.activeIncense;
+    }
+
+    public void setActiveAshedSticks(AshedSticks stick) {
+        println("setActiveAshedSticks");
+        this.activeAshedSticks = stick;
+        this.selectedIncenseStickName = stick.getBaseSticks().getItemName();
+        this.selectedIncenseStickId = stick.getBaseSticks().getItemId();
+    }
+
+    public AshedSticks getAshedSticks(AshedSticks stick) {
+        println("getAshedSticks");
+        return this.activeAshedSticks;
     }
 }
