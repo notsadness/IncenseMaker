@@ -111,9 +111,7 @@ public class StickMaker extends LoopingScript {
                 if (itemid == finalStickId) {
                     Item oldItem = event.getOldItem();
                     int newcount = item.getStackSize();
-                    println("NEW COUNT: " + newcount);
                     int oldcount = (oldItem != null && oldItem.getStackSize() > 1) ? oldItem.getStackSize() : 0;
-                    println("old COUNT: " + oldcount);
                     if (newcount > oldcount) {
                         finishedIncenseCount++;
                     }
