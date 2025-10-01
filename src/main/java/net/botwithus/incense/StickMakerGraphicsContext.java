@@ -1,6 +1,7 @@
 package net.botwithus.incense;
 
 import net.botwithus.rs3.imgui.ImGui;
+import net.botwithus.rs3.imgui.ImGuiWindowFlag;
 import net.botwithus.rs3.imgui.NativeInteger;
 import net.botwithus.rs3.script.ScriptConsole;
 import net.botwithus.rs3.script.ScriptGraphicsContext;
@@ -8,6 +9,8 @@ import net.botwithus.rs3.script.ScriptGraphicsContext;
 import java.util.Map;
 import java.util.Set;
 import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.ArrayList;
 
 public class StickMakerGraphicsContext extends ScriptGraphicsContext {
 
@@ -31,6 +34,10 @@ public class StickMakerGraphicsContext extends ScriptGraphicsContext {
 
     private String currentBankPreset; // Default selected bank preset
     private int currentBankPresetId; // Default selected bank preset
+
+    // Task queue UI variables
+    private String newTaskName = "";
+    private int selectedTaskIndex = -1;
 
     public StickMakerGraphicsContext(ScriptConsole console, StickMaker script) {
         super(console);
@@ -77,36 +84,86 @@ public class StickMakerGraphicsContext extends ScriptGraphicsContext {
                 script.DebugScript = ImGui.Checkbox("Debugging", script.DebugScript);
                 script.useLastPreset = ImGui.Checkbox("Use Last Preset", script.useLastPreset);
                 ImGui.Text("Bot Status: " + script.getBotState());
-                NativeInteger currentPresetIndex = new NativeInteger(findIndexForPreset(currentBankPreset));
-                String[] bplist = presetlist.keySet().toArray(new String[0]);
+
                 renderHerbDropDown();
-                if (!script.useLastPreset) {
-                    if (ImGui.Combo("Select Bank Preset", currentPresetIndex, bplist)) {
-                        currentBankPreset = bplist[currentPresetIndex.get()];
-                        currentBankPresetId = presetlist.get(currentBankPreset);
-                        script.currentPresetId = currentBankPresetId;
+
+                ImGui.Separator();
+                ImGui.Text("Task Queue:");
+                // Display current task queue
+                synchronized (script.taskQueue) {
+                    if (script.taskQueue.isEmpty()) {
+                        ImGui.Text("  -- No tasks in the queue -- ");
+                    } else {
+                        int index = 0;
+                        for (Task task : script.taskQueue) {
+                            String status = (script.activeTask == task) ? " [ACTIVE]" : "";
+                            boolean isSelected = (selectedTaskIndex == index);
+                            if (ImGui.Selectable(index + ". " + task.toString() + status, isSelected, 0)) {
+                                selectedTaskIndex = index;
+                            }
+                            index++;
+                        }
                     }
                 }
-                NativeInteger scriptOptionIndex = new NativeInteger(selectedScriptOption);
-                if (ImGui.Combo("Select Script Option", scriptOptionIndex, scriptOptions)) {
-                    selectedScriptOption = scriptOptionIndex.get();
-                    script.SelectedFunction = selectedScriptOption;
+
+                ImGui.Separator();
+                ImGui.Text("Add Task:");
+                script.newTaskCount = ImGui.InputInt("Count:", script.newTaskCount, 1, 1000, ImGuiWindowFlag.None.getValue());
+
+                String[] phaseOptions = {"Craft Logs", "Ash Sticks", "Herb Sticks"};
+                NativeInteger phaseIndex = new NativeInteger(script.newTaskPhase);
+                if (ImGui.Combo("Action", phaseIndex, phaseOptions)) {
+                    script.newTaskPhase = phaseIndex.get();
+                }
+                if (ImGui.IsItemHovered()) {
+                    ImGui.SetTooltip("Craft Logs: Make base sticks from logs\nAsh Sticks: Add ashes to base sticks\nHerb Sticks: Add herbs to ashed sticks");
+                }
+                String[] presetOptions = {"Preset 1", "Preset 2", "Preset 3", "Preset 4", "Preset 5", "Preset 6", "Preset 7", "Preset 8", "Preset 9"};
+                NativeInteger presetIndex = new NativeInteger(script.newTaskPreset - 1);
+                if (ImGui.Combo("Task Preset", presetIndex, presetOptions)) {
+                    script.newTaskPreset = presetIndex.get() + 1;
+                }
+
+                if (ImGui.Button("Add to Queue")) {
+                    if (newTaskName.isEmpty()) {
+                        newTaskName = "Task " + (script.taskQueue.size() + 1);
+                    }
+                    Task newTask = new Task(newTaskName, script.newTaskPhase, script.newTaskCount, script.newTaskPreset, script.activeIncense);
+                    script.addTask(newTask);
+                    script.println("Task added: " + newTaskName + " for " + script.activeIncense.getItemName());
+                    newTaskName = "";
+                    script.saveConfig();
+                }
+                ImGui.SameLine();
+                if (ImGui.Button("Remove")) {
+                    if (selectedTaskIndex >= 0) {
+                        script.removeTask(selectedTaskIndex);
+                        selectedTaskIndex = -1;
+                    }
+                    script.saveConfig();
+                }
+                ImGui.SameLine();
+                if (ImGui.Button("Clear All")) {
+                    script.clearTaskQueue();
+                    selectedTaskIndex = -1;
+                    script.saveConfig();
                 }
                 ImGui.EndTabItem();
             }
             if (ImGui.BeginTabItem("Instructions", 0)) {
                 ImGui.Text("How to use:");
+                ImGui.Text("1. Select your incense stick type");
+                ImGui.Text("2. Go to Task Queue tab");
+                ImGui.Text("3. Add tasks for each action:");
+                ImGui.Text("   - Set task count, action, and preset associated with the materials for that task");
+                ImGui.Text("   - Tasks will run in the order they are added");
+                ImGui.Text("4. Enable 'Use Last Preset' to be a little faster");
+                ImGui.Text("   - First run uses load from specific preset");
+                ImGui.Text("   - Subsequent runs use load last preset");
+                ImGui.Text("5. Click Start Script");
                 ImGui.Separator();
-                ImGui.Text("1. Select the incense stick type");
-                ImGui.Text("2. Choose the script option:");
-                ImGui.Text("   - Craft: Makes base sticks from logs");
-                ImGui.Text("   - Ash: Adds ashes to base sticks");
-                ImGui.Text("   - Herb: Adds herbs to ashed sticks");
-                ImGui.Text("3. Select bank preset with materials, OR use last preset");
-                ImGui.Text("4. Click Start Script");
-                ImGui.Separator();
-                ImGui.Text("Ensure you have the required items in your selected bank preset");
-                ImGui.Text("The script will stop when you run out of the required material");
+                ImGui.Text("The script will process tasks in order");
+                ImGui.Text("and stop when all tasks are complete");
                 ImGui.EndTabItem();
             }
             ImGui.EndTabBar();
@@ -126,6 +183,9 @@ public class StickMakerGraphicsContext extends ScriptGraphicsContext {
             setIncense = Incense.values()[selectedIncenseIndex];
             script.setActiveIncense(setIncense);
             script.setIncenseConfig();
+        }
+        if (ImGui.IsItemHovered()) {
+            ImGui.SetTooltip("Select your target incense stick\nThis is used to verify correct materials");
         }
     }
 

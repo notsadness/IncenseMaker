@@ -19,6 +19,10 @@ import net.botwithus.rs3.script.LoopingScript;
 import net.botwithus.rs3.script.config.ScriptConfig;
 import net.botwithus.rs3.util.RandomGenerator;
 import java.util.Random;
+import java.util.LinkedList;
+import java.util.Arrays;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 
 public class StickMaker extends LoopingScript {
 
@@ -40,6 +44,14 @@ public class StickMaker extends LoopingScript {
     public boolean useLastPreset = false;
     public Incense activeIncense;
 
+    // Task queue bits
+    public final LinkedList<Task> taskQueue = new LinkedList<>();
+    public Task activeTask = null;
+    private final Object taskLock = new Object();
+    public int newTaskCount = 1;
+    public int newTaskPhase = 0;
+    public int newTaskPreset = 1;
+
     // Refactored the cunt
     public int pIncenseId = 0;
     public int sIncenseId = 0;
@@ -60,10 +72,8 @@ public class StickMaker extends LoopingScript {
     public BotState botState = BotState.STOPPED;
 
     enum BotState {
-        // define your own states here
         IDLE,
         RUNNING,
-        PROCESSING,
         STOPPED,
         BANKING,
     }
@@ -73,6 +83,36 @@ public class StickMaker extends LoopingScript {
         scriptStart = System.currentTimeMillis();
         this.sgc = new StickMakerGraphicsContext(getConsole(), this);
         this.loopDelay = 590;
+        loadConfig();
+
+        // Subscribe to inventory updates to track crafted items
+        subscribe(InventoryUpdateEvent.class, event -> {
+            if (botState == BotState.RUNNING && event.getInventoryId() == 93 && activeTask != null) {
+                synchronized (taskLock) {
+                    switch (activeTask.getPhaseId()) {
+                        case 0: // Craft logs
+                            if (event.getNewItem().getId() == stickId) {
+                                activeTask.incrementCompleted(1);
+                                craftedLogCount++;
+                            }
+                            break;
+                        case 1: // Ash sticks
+                            if (event.getNewItem().getId() == sIncenseId) {
+                                activeTask.incrementCompleted(1);
+                                ashedIncenseCount++;
+                            }
+                            break;
+                        case 2: // Herb sticks
+                            if (event.getNewItem().getId() == pIncenseId) {
+                                activeTask.incrementCompleted(1);
+                                finishedIncenseCount++;
+                            }
+                            break;
+                    }
+                }
+            }
+        });
+
         return super.initialize();
     }
 
@@ -83,7 +123,6 @@ public class StickMaker extends LoopingScript {
             Execution.delay(random.nextLong(3000, 4000));
             return;
         }
-
         if (DebugScript) {
             // Debuging use. Comment out prior to release.
             println("Current bank preset id: " + currentPresetId);
@@ -93,6 +132,11 @@ public class StickMaker extends LoopingScript {
             println("Ashes ID: " + ashesId);
             println("Stick ID: " + stickId);
             println("Logs ID: " + logsId);
+            if (activeTask != null) {
+                if (DebugScript) {
+                    println("Active task: " + activeTask.getTaskName() + " | Action: " + activeTask.getPhaseName() + " | Progress: " + activeTask.getCompletedCount() + "/" + activeTask.getTargetCount());
+                }
+            }
         }
 
         switch (botState) {
@@ -127,11 +171,32 @@ public class StickMaker extends LoopingScript {
 
     private long HandleBanking() {
         println("HandleBankingState");
-        if (useLastPreset) {
-            Execution.delay(loadFromLastPreset());
-        } else {
-            LoadFromPreset(currentPresetId);
+        int presetToUse = currentPresetId;
+        boolean shouldUseLastPreset = useLastPreset;
+        boolean isFirstRun = false;
+
+        synchronized (taskLock) {
+            if (activeTask != null) {
+                presetToUse = activeTask.getBankPresetId();
+                isFirstRun = activeTask.isFirstRun();
+                if (isFirstRun) {
+                    println("HandleBankingState | First run of task, using preset: " + presetToUse);
+                    shouldUseLastPreset = false;
+                    activeTask.setFirstRunComplete();
+                } else {
+                    shouldUseLastPreset = useLastPreset;
+                }
+            }
         }
+
+        // Load from preset
+        if (!shouldUseLastPreset) {
+            LoadFromPreset(presetToUse);
+        } else {
+            Execution.delay(loadFromLastPreset());
+        }
+
+        // Check supplies based on current function
         switch (SelectedFunction) {
             case 0 -> {
                 if (hasLogs(logsId)) {
@@ -165,6 +230,34 @@ public class StickMaker extends LoopingScript {
     }
 
     public long HandleExec() {
+        synchronized (taskLock) {
+            if (activeTask != null && activeTask.isCompleted()) {
+                println("HandleExec | Task completed: " + activeTask.getTaskName());
+                taskQueue.poll();
+                activeTask = null;
+            }
+
+            if (activeTask == null && !taskQueue.isEmpty()) {
+                activeTask = taskQueue.peek();
+                if (activeTask != null) {
+                    println("HandleExec | Starting new task: " + activeTask.getTaskName() + " | Action: " + activeTask.getPhaseName());
+                    SelectedFunction = activeTask.getPhaseId();
+                    if (activeTask.getIncense() != null) {
+                        setActiveIncense(activeTask.getIncense());
+                        setIncenseConfig();
+                    }
+                    botState = BotState.BANKING;
+                    return random.nextLong(500, 1000);
+                }
+            }
+
+            if (activeTask == null && taskQueue.isEmpty()) {
+                println("HandleExec | No tasks in queue, stopping.");
+                botState = BotState.IDLE;
+                return random.nextLong(500, 1000);
+            }
+        }
+
         switch (SelectedFunction) {
             case 0 -> {
                 println("Selection 0: Processing logs");
@@ -383,5 +476,83 @@ public class StickMaker extends LoopingScript {
     public Incense getIncense(Incense incense) {
         println("getIncense");
         return this.activeIncense;
+    }
+
+    // Task queue methods
+    public void addTask(Task task) {
+        synchronized (taskLock) {
+            taskQueue.add(task);
+            println("addTask | Task added: " + task.getTaskName() + " | Queue size: " + taskQueue.size());
+        }
+    }
+
+    public void removeTask(int index) {
+        synchronized (taskLock) {
+            if (index >= 0 && index < taskQueue.size()) {
+                Task removed = taskQueue.remove(index);
+                println("removeTask | Task removed: " + removed.getTaskName());
+                if (activeTask == removed) {
+                    activeTask = null;
+                }
+            }
+        }
+    }
+
+    public void clearTaskQueue() {
+        synchronized (taskLock) {
+            taskQueue.clear();
+            activeTask = null;
+            println("clearTaskQueue | Task queue cleared");
+        }
+    }
+
+    // Configuration persistence
+    public void saveConfig() {
+        configuration.addProperty("Debugging", String.valueOf(DebugScript));
+        configuration.addProperty("useLastPreset", String.valueOf(useLastPreset));
+        configuration.addProperty("LogoutOnCompletion", String.valueOf(logout));
+        configuration.addProperty("currentPresetId", String.valueOf(currentPresetId));
+
+        synchronized (taskLock) {
+            Gson gson = new GsonBuilder().create();
+            String tasksJson = gson.toJson(taskQueue);
+            configuration.addProperty("taskQueue", tasksJson);
+        }
+
+        if (DebugScript) {
+            println("saveConfig | Saving script config");
+        }
+        configuration.save();
+    }
+
+    public void loadConfig() {
+        try {
+            DebugScript = Boolean.parseBoolean(configuration.getProperty("Debugging"));
+            logout = Boolean.parseBoolean(configuration.getProperty("LogoutOnCompletion"));
+            useLastPreset = Boolean.parseBoolean(configuration.getProperty("useLastPreset"));
+
+            String currentPresetIdValue = configuration.getProperty("currentPresetId");
+            if (currentPresetIdValue != null && !currentPresetIdValue.isEmpty()) {
+                currentPresetId = Integer.parseInt(currentPresetIdValue);
+            } else {
+                currentPresetId = 1;
+            }
+
+            String tasksJson = configuration.getProperty("taskQueue");
+            if (tasksJson != null && !tasksJson.isEmpty()) {
+                synchronized (taskLock) {
+                    Gson gson = new GsonBuilder().create();
+                    Task[] tasks = gson.fromJson(tasksJson, Task[].class);
+                    taskQueue.clear();
+                    taskQueue.addAll(Arrays.asList(tasks));
+                }
+            }
+
+            if (DebugScript) {
+                println("loadConfig | Script config loaded successfully");
+            }
+        } catch (Exception e) {
+            println("loadConfig | Failed to load script config: " + e.getMessage());
+        }
     }
 }
