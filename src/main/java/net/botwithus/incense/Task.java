@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
 public class Task {
+
     private String taskName;
     private int phaseId; // 0 = craft logs, 1 = ash sticks, 2 = herb sticks
     private int targetCount;
@@ -75,11 +76,11 @@ public class Task {
     public String getPhaseName() {
         switch (phaseId) {
             case 0:
-                return "Craft Logs";
+                return "Make Sticks";
             case 1:
-                return "Ash Sticks";
+                return "Add Ash";
             case 2:
-                return "Herb Sticks";
+                return "Add Herb";
             default:
                 return "Unknown";
         }

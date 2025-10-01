@@ -86,21 +86,20 @@ public class StickMakerGraphicsContext extends ScriptGraphicsContext {
 
                 ImGui.Separator();
                 ImGui.Text("Add Task:");
-                script.newTaskCount = ImGui.InputInt("Count:", script.newTaskCount, 1, 1000, ImGuiWindowFlag.None.getValue());
-
-                String[] phaseOptions = {"Craft Logs", "Ash Sticks", "Herb Sticks"};
+                String[] phaseOptions = {"Make Sticks", "Add Ash", "Add Herb"};
                 NativeInteger phaseIndex = new NativeInteger(script.newTaskPhase);
                 if (ImGui.Combo("Action", phaseIndex, phaseOptions)) {
                     script.newTaskPhase = phaseIndex.get();
                 }
                 if (ImGui.IsItemHovered()) {
-                    ImGui.SetTooltip("Craft Logs: Make base sticks from logs\nAsh Sticks: Add ashes to base sticks\nHerb Sticks: Add herbs to ashed sticks");
+                    ImGui.SetTooltip("Make Sticks: Make base sticks from logs\nAdd Ash: Add ashes to base sticks\nAdd Herb: Add herbs to ashed sticks");
                 }
                 String[] presetOptions = {"Preset 1", "Preset 2", "Preset 3", "Preset 4", "Preset 5", "Preset 6", "Preset 7", "Preset 8", "Preset 9"};
                 NativeInteger presetIndex = new NativeInteger(script.newTaskPreset - 1);
                 if (ImGui.Combo("Task Preset", presetIndex, presetOptions)) {
                     script.newTaskPreset = presetIndex.get() + 1;
                 }
+                script.newTaskCount = ImGui.InputInt("Count:", script.newTaskCount, 1, 1000, ImGuiWindowFlag.None.getValue());
 
                 if (ImGui.Button("Add to Queue")) {
                     if (newTaskName.isEmpty()) {
