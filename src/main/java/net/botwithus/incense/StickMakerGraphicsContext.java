@@ -1,6 +1,7 @@
 package net.botwithus.incense;
 
 import net.botwithus.rs3.imgui.ImGui;
+import net.botwithus.rs3.imgui.ImGuiWindowFlag;
 import net.botwithus.rs3.imgui.NativeInteger;
 import net.botwithus.rs3.script.ScriptConsole;
 import net.botwithus.rs3.script.ScriptGraphicsContext;
@@ -8,6 +9,8 @@ import net.botwithus.rs3.script.ScriptGraphicsContext;
 import java.util.Map;
 import java.util.Set;
 import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.ArrayList;
 
 public class StickMakerGraphicsContext extends ScriptGraphicsContext {
 
@@ -26,11 +29,12 @@ public class StickMakerGraphicsContext extends ScriptGraphicsContext {
     private Map<String, Integer> presetlist = new LinkedHashMap<>(); // Stick craft list (1)
     public boolean Logout = false;
 
-    private String[] scriptOptions = {"Craft incense sticks", "Ash incense sticks", "Herb incense sticks"};
-    private int selectedScriptOption = 0; // Default to "Craft incense sticks"
-
     private String currentBankPreset; // Default selected bank preset
     private int currentBankPresetId; // Default selected bank preset
+
+    // Task queue UI variables
+    private String newTaskName = "";
+    private int selectedTaskIndex = -1;
 
     public StickMakerGraphicsContext(ScriptConsole console, StickMaker script) {
         super(console);
@@ -77,36 +81,96 @@ public class StickMakerGraphicsContext extends ScriptGraphicsContext {
                 script.DebugScript = ImGui.Checkbox("Debugging", script.DebugScript);
                 script.useLastPreset = ImGui.Checkbox("Use Last Preset", script.useLastPreset);
                 ImGui.Text("Bot Status: " + script.getBotState());
-                NativeInteger currentPresetIndex = new NativeInteger(findIndexForPreset(currentBankPreset));
-                String[] bplist = presetlist.keySet().toArray(new String[0]);
+
                 renderHerbDropDown();
-                if (!script.useLastPreset) {
-                    if (ImGui.Combo("Select Bank Preset", currentPresetIndex, bplist)) {
-                        currentBankPreset = bplist[currentPresetIndex.get()];
-                        currentBankPresetId = presetlist.get(currentBankPreset);
-                        script.currentPresetId = currentBankPresetId;
-                    }
+
+                ImGui.Separator();
+                ImGui.Text("Add Task:");
+                String[] phaseOptions = {"Make Sticks", "Add Ash", "Add Herb"};
+                NativeInteger phaseIndex = new NativeInteger(script.newTaskPhase);
+                if (ImGui.Combo("Action", phaseIndex, phaseOptions)) {
+                    script.newTaskPhase = phaseIndex.get();
                 }
-                NativeInteger scriptOptionIndex = new NativeInteger(selectedScriptOption);
-                if (ImGui.Combo("Select Script Option", scriptOptionIndex, scriptOptions)) {
-                    selectedScriptOption = scriptOptionIndex.get();
-                    script.SelectedFunction = selectedScriptOption;
+                if (ImGui.IsItemHovered()) {
+                    ImGui.SetTooltip("Make Sticks: Make base sticks from logs\nAdd Ash: Add ashes to base sticks\nAdd Herb: Add herbs to ashed sticks");
+                }
+                String[] presetOptions = {"Preset 1", "Preset 2", "Preset 3", "Preset 4", "Preset 5", "Preset 6", "Preset 7", "Preset 8", "Preset 9"};
+                NativeInteger presetIndex = new NativeInteger(script.newTaskPreset - 1);
+                if (ImGui.Combo("Task Preset", presetIndex, presetOptions)) {
+                    script.newTaskPreset = presetIndex.get() + 1;
+                }
+                script.newTaskCount = ImGui.InputInt("Count:", script.newTaskCount, 1, 1000, ImGuiWindowFlag.None.getValue());
+
+                if (ImGui.Button("Add to Queue")) {
+                    if (newTaskName.isEmpty()) {
+                        newTaskName = "Task " + (script.taskQueue.size() + 1);
+                    }
+                    Task newTask = new Task(newTaskName, script.newTaskPhase, script.newTaskCount, script.newTaskPreset, script.activeIncense);
+                    script.addTask(newTask);
+                    script.println("Task added: " + newTaskName + " for " + script.activeIncense.getItemName());
+                    newTaskName = "";
+                    script.saveConfig();
+                }
+                ImGui.SameLine();
+                if (ImGui.Button("Clear All")) {
+                    script.clearTaskQueue();
+                    script.saveConfig();
+                }
+
+                ImGui.Separator();
+                // Display task queue in table format
+                if (ImGui.BeginTable("Tasks", 5, ImGuiWindowFlag.None.getValue())) {
+                    ImGui.TableSetupColumn("Incense", 0);
+                    ImGui.TableSetupColumn("Action", 0);
+                    ImGui.TableSetupColumn("Progress", 0);
+                    ImGui.TableSetupColumn("Preset", 0);
+                    ImGui.TableSetupColumn("Remove", 0);
+                    ImGui.TableHeadersRow();
+
+                    synchronized (script.taskQueue) {
+                        for (Task task : script.taskQueue) {
+                            ImGui.TableNextRow();
+                            ImGui.TableNextColumn();
+                            String incenseName = task.getIncense() != null ? task.getIncense().getItemName() : "Unknown";
+                            ImGui.Text(incenseName);
+
+                            ImGui.TableNextColumn();
+                            ImGui.Text(task.getPhaseName());
+
+                            ImGui.TableNextColumn();
+                            String progress = task.getCompletedCount() + "/" + task.getTargetCount();
+                            if (script.activeTask == task) {
+                                progress += " [ACTIVE]";
+                            }
+                            ImGui.Text(progress);
+
+                            ImGui.TableNextColumn();
+                            ImGui.Text("Preset " + task.getBankPresetId());
+
+                            ImGui.TableNextColumn();
+                            if (ImGui.Button("Remove##" + task.hashCode())) {
+                                script.taskQueue.remove(task);
+                                script.saveConfig();
+                                break;
+                            }
+                        }
+                    }
+                    ImGui.EndTable();
                 }
                 ImGui.EndTabItem();
             }
             if (ImGui.BeginTabItem("Instructions", 0)) {
                 ImGui.Text("How to use:");
-                ImGui.Separator();
-                ImGui.Text("1. Select the incense stick type");
-                ImGui.Text("2. Choose the script option:");
-                ImGui.Text("   - Craft: Makes base sticks from logs");
-                ImGui.Text("   - Ash: Adds ashes to base sticks");
-                ImGui.Text("   - Herb: Adds herbs to ashed sticks");
-                ImGui.Text("3. Select bank preset with materials, OR use last preset");
+                ImGui.Text("1. Select your incense stick type");
+                ImGui.Text("2. Add tasks for each stick making action:");
+                ImGui.Text("   - Set task count, action, and bank preset containing materials for that task");
+                ImGui.Text("   - Tasks will run in the order they are added");
+                ImGui.Text("3. Enable 'Use Last Preset' to be a little faster");
+                ImGui.Text("   - First run uses load from specific preset");
+                ImGui.Text("   - Subsequent runs use load last preset");
                 ImGui.Text("4. Click Start Script");
                 ImGui.Separator();
-                ImGui.Text("Ensure you have the required items in your selected bank preset");
-                ImGui.Text("The script will stop when you run out of the required material");
+                ImGui.Text("The script will process tasks in order and stop when all tasks are completed or if there are no materials found");
                 ImGui.EndTabItem();
             }
             ImGui.EndTabBar();
@@ -126,6 +190,9 @@ public class StickMakerGraphicsContext extends ScriptGraphicsContext {
             setIncense = Incense.values()[selectedIncenseIndex];
             script.setActiveIncense(setIncense);
             script.setIncenseConfig();
+        }
+        if (ImGui.IsItemHovered()) {
+            ImGui.SetTooltip("Select your target incense stick\nThis is used to verify correct materials");
         }
     }
 
