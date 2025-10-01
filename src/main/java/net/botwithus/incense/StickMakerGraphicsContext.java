@@ -29,9 +29,6 @@ public class StickMakerGraphicsContext extends ScriptGraphicsContext {
     private Map<String, Integer> presetlist = new LinkedHashMap<>(); // Stick craft list (1)
     public boolean Logout = false;
 
-    private String[] scriptOptions = {"Craft incense sticks", "Ash incense sticks", "Herb incense sticks"};
-    private int selectedScriptOption = 0; // Default to "Craft incense sticks"
-
     private String currentBankPreset; // Default selected bank preset
     private int currentBankPresetId; // Default selected bank preset
 
@@ -88,25 +85,6 @@ public class StickMakerGraphicsContext extends ScriptGraphicsContext {
                 renderHerbDropDown();
 
                 ImGui.Separator();
-                ImGui.Text("Task Queue:");
-                // Display current task queue
-                synchronized (script.taskQueue) {
-                    if (script.taskQueue.isEmpty()) {
-                        ImGui.Text("  -- No tasks in the queue -- ");
-                    } else {
-                        int index = 0;
-                        for (Task task : script.taskQueue) {
-                            String status = (script.activeTask == task) ? " [ACTIVE]" : "";
-                            boolean isSelected = (selectedTaskIndex == index);
-                            if (ImGui.Selectable(index + ". " + task.toString() + status, isSelected, 0)) {
-                                selectedTaskIndex = index;
-                            }
-                            index++;
-                        }
-                    }
-                }
-
-                ImGui.Separator();
                 ImGui.Text("Add Task:");
                 script.newTaskCount = ImGui.InputInt("Count:", script.newTaskCount, 1, 1000, ImGuiWindowFlag.None.getValue());
 
@@ -135,35 +113,65 @@ public class StickMakerGraphicsContext extends ScriptGraphicsContext {
                     script.saveConfig();
                 }
                 ImGui.SameLine();
-                if (ImGui.Button("Remove")) {
-                    if (selectedTaskIndex >= 0) {
-                        script.removeTask(selectedTaskIndex);
-                        selectedTaskIndex = -1;
-                    }
-                    script.saveConfig();
-                }
-                ImGui.SameLine();
                 if (ImGui.Button("Clear All")) {
                     script.clearTaskQueue();
-                    selectedTaskIndex = -1;
                     script.saveConfig();
+                }
+
+                ImGui.Separator();
+                // Display task queue in table format
+                if (ImGui.BeginTable("Tasks", 5, ImGuiWindowFlag.None.getValue())) {
+                    ImGui.TableSetupColumn("Incense", 0);
+                    ImGui.TableSetupColumn("Action", 0);
+                    ImGui.TableSetupColumn("Progress", 0);
+                    ImGui.TableSetupColumn("Preset", 0);
+                    ImGui.TableSetupColumn("Remove", 0);
+                    ImGui.TableHeadersRow();
+
+                    synchronized (script.taskQueue) {
+                        for (Task task : script.taskQueue) {
+                            ImGui.TableNextRow();
+                            ImGui.TableNextColumn();
+                            String incenseName = task.getIncense() != null ? task.getIncense().getItemName() : "Unknown";
+                            ImGui.Text(incenseName);
+
+                            ImGui.TableNextColumn();
+                            ImGui.Text(task.getPhaseName());
+
+                            ImGui.TableNextColumn();
+                            String progress = task.getCompletedCount() + "/" + task.getTargetCount();
+                            if (script.activeTask == task) {
+                                progress += " [ACTIVE]";
+                            }
+                            ImGui.Text(progress);
+
+                            ImGui.TableNextColumn();
+                            ImGui.Text("Preset " + task.getBankPresetId());
+
+                            ImGui.TableNextColumn();
+                            if (ImGui.Button("Remove##" + task.hashCode())) {
+                                script.taskQueue.remove(task);
+                                script.saveConfig();
+                                break;
+                            }
+                        }
+                    }
+                    ImGui.EndTable();
                 }
                 ImGui.EndTabItem();
             }
             if (ImGui.BeginTabItem("Instructions", 0)) {
                 ImGui.Text("How to use:");
                 ImGui.Text("1. Select your incense stick type");
-                ImGui.Text("2. Go to Task Queue tab");
-                ImGui.Text("3. Add tasks for each action:");
-                ImGui.Text("   - Set task count, action, and preset associated with the materials for that task");
+                ImGui.Text("2. Add tasks for each stick making action:");
+                ImGui.Text("   - Set task count, action, and bank preset containing materials for that task");
                 ImGui.Text("   - Tasks will run in the order they are added");
-                ImGui.Text("4. Enable 'Use Last Preset' to be a little faster");
+                ImGui.Text("3. Enable 'Use Last Preset' to be a little faster");
                 ImGui.Text("   - First run uses load from specific preset");
                 ImGui.Text("   - Subsequent runs use load last preset");
-                ImGui.Text("5. Click Start Script");
+                ImGui.Text("4. Click Start Script");
                 ImGui.Separator();
-                ImGui.Text("The script will process tasks in order");
-                ImGui.Text("and stop when all tasks are complete");
+                ImGui.Text("The script will process tasks in order and stop when all tasks are completed or if there are no materials found");
                 ImGui.EndTabItem();
             }
             ImGui.EndTabBar();

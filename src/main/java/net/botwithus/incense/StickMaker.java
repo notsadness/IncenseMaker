@@ -123,6 +123,8 @@ public class StickMaker extends LoopingScript {
             Execution.delay(random.nextLong(3000, 4000));
             return;
         }
+        saveConfig();
+
         if (DebugScript) {
             // Debuging use. Comment out prior to release.
             println("Current bank preset id: " + currentPresetId);
@@ -161,11 +163,11 @@ public class StickMaker extends LoopingScript {
 
     // Refactored state handlers
     private long HandleIdle() {
-        println("HandleIdle");
         if (logout) {
             botState = BotState.STOPPED;
             Logout();
         }
+        botState = BotState.STOPPED;
         return random.nextLong(500, 1000);
     }
 
@@ -354,7 +356,7 @@ public class StickMaker extends LoopingScript {
     public boolean canHerb() {
         int sticks = InventoryItemQuery.newQuery(93).ids(sIncenseId).results().first()
                 .getStackSize();
-        int herbcount = Backpack.getCount(fHerbId);
+        int herbcount = Backpack.getQuantity(fHerbId);
         println("canHerb | stick count: " + sticks + " | herb count: " + herbcount);
         return sticks >= 1 && herbcount >= 1;
     }
