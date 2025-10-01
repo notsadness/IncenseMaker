@@ -40,18 +40,10 @@ tasks.named<Jar>("jar") {
     finalizedBy(copyJar)
 }
 
-// dependencies {
-//     implementation("net.botwithus.rs3:botwithus-api:1.0.0-SNAPSHOT")
-//     implementation("net.botwithus.xapi.public:botwithusx-api:1.0.0-SNAPSHOT")
-//     "includeInJar"("net.botwithus.xapi.public:botwithusx-api:1.0.0-SNAPSHOT")
-//     implementation("com.google.code.gson:gson:2.10.1")
-//     testImplementation("org.junit.jupiter:junit-jupiter-api:5.9.2")
-//     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.9.2")
-// }
 dependencies {
-    implementation("net.botwithus.rs3:botwithus-api:1.0.0-20240123.223505-20")
-    implementation("net.botwithus.xapi.public:api:1.0.0-20240205.203949-14")
-    "includeInJar"("net.botwithus.xapi.public:api:1.0.0-20240205.203949-14")
+    implementation("net.botwithus.rs3:botwithus-api:1.0.0-SNAPSHOT")
+    implementation("net.botwithus.xapi.public:api:1.0.0-SNAPSHOT")
+    "includeInJar"("net.botwithus.xapi.public:api:1.0.0-SNAPSHOT")
     implementation("com.google.code.gson:gson:2.10.1")
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.9.2")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.9.2")

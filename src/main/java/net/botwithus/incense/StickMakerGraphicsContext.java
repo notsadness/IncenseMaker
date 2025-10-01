@@ -14,35 +14,19 @@ public class StickMakerGraphicsContext extends ScriptGraphicsContext {
     private final StickMaker script;
 
     // Indexes
-    public NativeInteger LogIndex;
-    public NativeInteger BaseStickIndex;
     public NativeInteger IncenseIndex;
-    public NativeInteger AshedStickIndex;
-    private int selectedLogIndex = 0;
-    private int selectedAshedStickIndex = 0;
     private int selectedIncenseIndex = 0;
-    public Logs setLogs;
-    public BaseSticks setBaseSticks;
-    public AshedSticks setAshedSticks;
     public Incense setIncense;
 
-    private String[] LogNames = java.util.Arrays.stream(Logs.values())
-            .map(Enum::name)
-            .toArray(String[]::new);
-
-    private String[] AshedStickNames = java.util.Arrays.stream(AshedSticks.values())
-            .map(Enum::name)
-            .toArray(String[]::new);
-
     private String[] IncenseStickNames = java.util.Arrays.stream(Incense.values())
-            .map(Enum::name)
+            .map(Incense::getItemName)
             .toArray(String[]::new);
 
     // Vars
     private Map<String, Integer> presetlist = new LinkedHashMap<>(); // Stick craft list (1)
     public boolean Logout = false;
 
-    private String[] scriptOptions = { "Craft incense sticks", "Ash incense sticks", "Herb incense sticks" };
+    private String[] scriptOptions = {"Craft incense sticks", "Ash incense sticks", "Herb incense sticks"};
     private int selectedScriptOption = 0; // Default to "Craft incense sticks"
 
     private String currentBankPreset; // Default selected bank preset
@@ -52,17 +36,6 @@ public class StickMakerGraphicsContext extends ScriptGraphicsContext {
         super(console);
         this.script = script;
 
-        // Refactored Logs
-        this.LogIndex = new NativeInteger(0);
-        this.setLogs = Logs.values()[selectedLogIndex];
-        script.setActiveLogs(setLogs);
-
-        // Refactored ashed sticks
-        this.AshedStickIndex = new NativeInteger(0);
-        this.setAshedSticks = AshedSticks.values()[selectedAshedStickIndex];
-        script.setActiveAshedSticks(setAshedSticks);
-
-        // Refactored incense sticks
         this.IncenseIndex = new NativeInteger(0);
         this.setIncense = Incense.values()[selectedIncenseIndex];
         script.setActiveIncense(setIncense);
@@ -102,41 +75,38 @@ public class StickMakerGraphicsContext extends ScriptGraphicsContext {
                 ImGui.SameLine();
                 script.logout = ImGui.Checkbox("Logout on Completion", script.logout);
                 script.DebugScript = ImGui.Checkbox("Debugging", script.DebugScript);
+                script.useLastPreset = ImGui.Checkbox("Use Last Preset", script.useLastPreset);
                 ImGui.Text("Bot Status: " + script.getBotState());
                 NativeInteger currentPresetIndex = new NativeInteger(findIndexForPreset(currentBankPreset));
                 String[] bplist = presetlist.keySet().toArray(new String[0]);
-                if (ImGui.Combo("Select Bank Preset", currentPresetIndex, bplist)) {
-                    currentBankPreset = bplist[currentPresetIndex.get()];
-                    currentBankPresetId = presetlist.get(currentBankPreset);
-                    script.currentPresetId = currentBankPresetId;
+                renderHerbDropDown();
+                if (!script.useLastPreset) {
+                    if (ImGui.Combo("Select Bank Preset", currentPresetIndex, bplist)) {
+                        currentBankPreset = bplist[currentPresetIndex.get()];
+                        currentBankPresetId = presetlist.get(currentBankPreset);
+                        script.currentPresetId = currentBankPresetId;
+                    }
                 }
                 NativeInteger scriptOptionIndex = new NativeInteger(selectedScriptOption);
                 if (ImGui.Combo("Select Script Option", scriptOptionIndex, scriptOptions)) {
                     selectedScriptOption = scriptOptionIndex.get();
                     script.SelectedFunction = selectedScriptOption;
                 }
-                switch (selectedScriptOption) {
-                    case 0: // "Craft incense sticks"
-                        renderLogDropDown();
-                        break;
-                    case 1: // "Ash incense sticks"
-                        renderStickDropDown();
-                        break;
-                    case 2: // "Herb incense sticks"
-                        renderHerbDropDown();
-                        break;
-                }
                 ImGui.EndTabItem();
             }
-            if (ImGui.BeginTabItem("Status", 0)) {
-                long elapsed = System.currentTimeMillis() - script.scriptStart;
-                long seconds = elapsed / 1000 % 60;
-                long minutes = elapsed / 60000 % 60;
-                long hours = elapsed / 3600000 % 24;
-                ImGui.Text("Run time: %02d:%02d:%02d%n", hours, minutes, seconds);
-                ImGui.Text("Crafted Logs: %,d", script.craftedLogCount);
-                ImGui.Text("Ashed Incense: %,d", script.ashedIncenseCount);
-                ImGui.Text("Completed Incense: %,d", script.finishedIncenseCount);
+            if (ImGui.BeginTabItem("Instructions", 0)) {
+                ImGui.Text("How to use:");
+                ImGui.Separator();
+                ImGui.Text("1. Select the incense stick type");
+                ImGui.Text("2. Choose the script option:");
+                ImGui.Text("   - Craft: Makes base sticks from logs");
+                ImGui.Text("   - Ash: Adds ashes to base sticks");
+                ImGui.Text("   - Herb: Adds herbs to ashed sticks");
+                ImGui.Text("3. Select bank preset with materials, OR use last preset");
+                ImGui.Text("4. Click Start Script");
+                ImGui.Separator();
+                ImGui.Text("Ensure you have the required items in your selected bank preset");
+                ImGui.Text("The script will stop when you run out of the required material");
                 ImGui.EndTabItem();
             }
             ImGui.EndTabBar();
@@ -149,32 +119,13 @@ public class StickMakerGraphicsContext extends ScriptGraphicsContext {
         super.drawOverlay();
     }
 
-    // Render methods to dynamically display relevent menu items
-    // Refactored methods
-    private void renderLogDropDown() {
-        NativeInteger currentIndex = new NativeInteger(selectedLogIndex);
-        if (ImGui.Combo("Select Logs", currentIndex, LogNames)) {
-            selectedLogIndex = currentIndex.get();
-            setLogs = Logs.values()[selectedLogIndex];
-            script.setActiveLogs(setLogs);
-        }
-    }
-
-    private void renderStickDropDown() {
-        NativeInteger currentIndex = new NativeInteger(selectedAshedStickIndex);
-        if (ImGui.Combo("Select Incense Stick", currentIndex, AshedStickNames)) {
-            selectedAshedStickIndex = currentIndex.get();
-            setAshedSticks = AshedSticks.values()[selectedAshedStickIndex];
-            script.setActiveAshedSticks(setAshedSticks);
-        }
-    }
-
     private void renderHerbDropDown() {
         NativeInteger currentIndex = new NativeInteger(selectedIncenseIndex);
         if (ImGui.Combo("Select Incense Stick", currentIndex, IncenseStickNames)) {
             selectedIncenseIndex = currentIndex.get();
             setIncense = Incense.values()[selectedIncenseIndex];
             script.setActiveIncense(setIncense);
+            script.setIncenseConfig();
         }
     }
 
